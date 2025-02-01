@@ -4,6 +4,18 @@
 
 ColorDoll is a Python library that provides flexible and powerful ANSI colorization, including nested colorization and theming for complex data structures like dictionaries, lists, and JSON strings.
 
+And, it's fairly Quick. 
+
+
+## 🚀 Performance Benchmarks ⏱️
+`(amd 3800, 3200mhz ram, single XPG-8200 nvme, win11)`
+
+| Function             | Runs      | Min Time (sec) | Max Time (sec) | Avg Time (sec) | As milliseconds | Runs / second  |
+|----------------------|-----------|----------------|----------------|----------------|-----------------|----------------|
+| `colorize`           | 10,000    | 0.000006       | 0.000006       | 0.000006       |       0.006     | ~165000        |
+| `theme_colorize`     | 10,000    | 0.000059       | 0.000060       | 0.000059       |       0.059     | ~16950         |
+| Themed Decorator     | 10,000    | 0.000023       | 0.000023       | 0.000023       |       0.023     | ~43450         |
+
 ## Features
 
 * **Nested Colorization:**  Handles nested ANSI color codes gracefully, ensuring correct color rendering even with complex formatting.
@@ -78,8 +90,7 @@ print(colored_data)
 
 ```
 
-
-![alt text](<media/demo.png>)
+![](https://github.com/kaigouthro/colordoll/blob/66c6f1d2913dfa5134c6f231a429241b728ec984/media/demo.png)
 
 ## Contributing
 
@@ -98,4 +109,9 @@ This project is licensed under the MIT License.
 * Introduced theming and decorator support.
 * Enabled custom color configurations.
 * Included various pre-defined themes.
+
+### 0.1.2 Refactor
+* Added Bench
+
+
 
