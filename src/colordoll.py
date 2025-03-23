@@ -1,212 +1,306 @@
-
-import contextlib
+import random
 import json
+import re
 from functools import wraps
+from typing import Dict, Union, Optional, Any, Callable
+import yaml
 
 
 class AnsiColor:
-    """
-    Represents an ANSI escape code for text coloration.
-    """
+    """Represents an ANSI escape code for text coloration."""
 
-    def __init__(self, code: int, name: str = ""):
+    code: int
+    name: str
+
+    def __init__(self, code: int, name: str = "") -> None:
         """
         Initializes an AnsiColor object.
 
-        :param code: The ANSI escape code.
-        :param name: The name of the color.
+        Args:
+            code (int): The ANSI escape code.
+            name (str, optional): The name of the color. Defaults to "".
+
+        Raises:
+            ValueError: If the ANSI code is not an integer.
         """
-        assert isinstance(code, int), "ANSI code must be an integer"
-        self.code: int = code
-        self.name: str = name
+        if not isinstance(code, int):
+            raise ValueError("ANSI code must be an integer")
+        self.code = code
+        self.name = name
 
     def __str__(self) -> str:
-        """
-        Returns the ANSI escape code sequence as a string.
-        """
+        """Returns the ANSI escape code sequence as a string."""
         return f"\033[{self.code}m"
 
     def __repr__(self) -> str:
-        """
-        Returns a string representation of the AnsiColor object.
-        """
+        """Returns a string representation of the AnsiColor object."""
         return f"AnsiColor(code={self.code}, name='{self.name}')"
 
 
-class ColorConfig:
-    """
-    Manages color configurations, including loading from a file or a dictionary.
-    """
+class ConfigLoader:
+    """Loads configuration from various sources (file, dict, string)."""
 
-    def __init__(self, config_source: str | dict = None):
+    def load_config(self, config_source: Union[str, Dict, Any]) -> Dict:
         """
-        Initializes a ColorConfig object.
+        Loads configuration from a file, dictionary, or string.
 
-        :param config_source: A file path or a dictionary containing color configurations.
+        Args:
+            config_source (Union[str, Dict, Any]): Path to config file, config dictionary, or config string.
+
+        Returns:
+            Dict: Configuration dictionary. Returns empty dict on loading failure.
         """
-        self.config: dict = self.load_config(
-            config_source) if config_source else {}
-
-    def load_config(self, config_source: str | dict) -> dict:
-        """
-        Loads color configurations from a file or a dictionary.
-
-        :param config_source: A file path or a dictionary containing color configurations.
-        :return: A dictionary containing the loaded color configurations.
-        """
-        assert isinstance(
-            config_source, (str, dict)
-        ), "Config source must be a file path or a dictionary"
-
         if isinstance(config_source, str):
-            with open(config_source, "r") as f:
-                return json.load(f)
-        return config_source
+            return self._load_from_string_or_file(config_source)
+        elif isinstance(config_source, Dict):
+            return config_source
+        return {}
+
+    def _load_from_string_or_file(self, config_source: str) -> Dict:
+        """
+        Attempts to load config from a file path or a JSON/YAML string.
+
+        Args:
+            config_source (str): File path or configuration string.
+
+        Returns:
+            Dict: Configuration dictionary, empty if loading fails.
+        """
+        try:
+            with open(config_source, "r") as file:
+                if config_source.endswith((".yaml", ".yml")):
+                    return yaml.safe_load(file) or {}
+                return json.load(file)
+        except FileNotFoundError:
+            return self._parse_config_string(config_source)
+        except (json.JSONDecodeError, yaml.YAMLError):
+            return self._parse_config_string(config_source)
+        return {}
+
+    def _parse_config_string(self, config_string: str) -> Dict:
+        """
+        Attempts to parse a configuration string as JSON or YAML.
+
+        Args:
+            config_string (str): The configuration string.
+
+        Returns:
+            Dict: Configuration dictionary, empty if parsing fails.
+        """
+        try:
+            return json.loads(config_string)
+        except json.JSONDecodeError:
+            try:
+                return yaml.safe_load(config_string) or {}
+            except (yaml.YAMLError, TypeError):
+                return {}
+
+
+class ColorConfig:
+    """Manages color configurations."""
+
+    config: Dict
+
+    def __init__(self, config_source: Union[str, Dict, Any] = None) -> None:
+        """
+        Initializes ColorConfig by loading configurations.
+
+        Args:
+            config_source (Union[str, Dict, Any], optional): Configuration source (file, dict, string). Defaults to None.
+        """
+        self.config = ConfigLoader().load_config(config_source)
 
     def get_color_code(self, color_name: str) -> str:
         """
-        Retrieves the ANSI escape code based on the given color name.
+        Retrieves ANSI color code string for a given color name.
 
-        :param color_name: The name of the color to retrieve.
-        :return: The ANSI escape code string for the requested color, or an empty string if not found.
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            str: ANSI color code string, or empty string if color not found.
         """
         color = self.get_color_obj(color_name)
         return str(color) if color else ""
 
     def get_bg_color_code(self, color_name: str) -> str:
         """
-        Retrieves the ANSI escape code for background colors based on the given color name.
+        Retrieves ANSI background color code string for a color name.
 
-        :param color_name: The name of the background color to retrieve.
-        :return: The ANSI escape code string for the requested background color, or an empty string if not found.
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            str: ANSI background color code string, empty string if not found.
         """
         color = self.get_bg_color_obj(color_name)
         return str(color) if color else ""
 
-    def get_color_obj(self, color_name: str) -> AnsiColor | None:
+    def get_color_obj(self, color_name: str) -> Optional[AnsiColor]:
         """
-        Retrieves an AnsiColor object based on the given color name.
+        Retrieves AnsiColor object for a given color name.
 
-        :param color_name: The name of the color to retrieve.
-        :return: An AnsiColor object representing the requested color, or None if not found.
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            Optional[AnsiColor]: AnsiColor object, or None if not found.
         """
         return self._get_color_object(color_name)
 
-    def get_bg_color_obj(self, color_name: str) -> AnsiColor | None:
+    def get_bg_color_obj(self, color_name: str) -> Optional[AnsiColor]:
         """
-        Retrieves an AnsiColor object for background colors based on the given color name.
+        Retrieves AnsiColor object for a background color name.
 
-        :param color_name: The name of the background color to retrieve.
-        :return: An AnsiColor object representing the requested background color, or None if not found.
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            Optional[AnsiColor]: AnsiColor background color object, or None if not found.
         """
         bg_color_name = f"bg_{color_name}"
         return self._get_color_object(bg_color_name)
 
-    def _get_color_object(self, arg0):
-        if arg0 not in self.config:
+    def _get_color_object(self, color_name: str) -> Optional[AnsiColor]:
+        """
+        Internal method to get AnsiColor object by name.
+
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            Optional[AnsiColor]: AnsiColor object, or None if configuration is invalid or color not found.
+
+        Raises:
+            ValueError: If color configuration is invalid (missing 'code' field).
+        """
+        if color_name not in self.config:
             return None
-        color_data: dict = self.config[arg0]
-        assert (
-            "code" in color_data
-        ), f"Invalid color configuration for '{arg0}': missing 'code' field"
-        return AnsiColor(code=color_data["code"], name=arg0)
+        color_data: Dict = self.config[color_name]
+        if "code" not in color_data:
+            raise ValueError(
+                f"Invalid color configuration for '{color_name}': missing 'code' field")
+        return AnsiColor(code=color_data["code"], name=color_name)
+
+
+class OutputHandler:
+    """Base class for output handlers."""
+
+    def format(self, data: Any, theme_colors: Dict) -> str:
+        """
+        Formats the colorized data. Abstract method to be implemented by subclasses.
+
+        Args:
+            data (Any): Data to be formatted.
+            theme_colors (Dict): Dictionary of theme colors.
+
+        Raises:
+            NotImplementedError: If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError(
+            "Subclasses must implement the format method.")
 
 
 class Colorizer:
-    """
-    Provides methods for colorizing text using ANSI escape codes.
-    """
-    RESET: AnsiColor = AnsiColor(0, "reset")
+    """Provides methods for colorizing text and handling output formatting."""
 
-    def __init__(self, config: ColorConfig = None):
+    RESET: AnsiColor = AnsiColor(0, "reset")
+    config: ColorConfig
+    colors: Dict[str, AnsiColor]
+    bg_colors: Dict[str, AnsiColor]
+    output_handler: OutputHandler
+
+    def __init__(self, config: Optional[ColorConfig] = None, output_handler: Optional[OutputHandler] = None) -> None:
         """
         Initializes a Colorizer object.
 
-        :param config: A ColorConfig object containing color configurations.
+        Args:
+            config (Optional[ColorConfig], optional): Color configuration object. Defaults to None (creates default ColorConfig).
+            output_handler (Optional[OutputHandler], optional): Output handler object. Defaults to None (uses DataHandler).
         """
-        self.config: ColorConfig = config or ColorConfig()
-        self.colors: dict[str, AnsiColor] = {}
-        self.bg_colors: dict[str, AnsiColor] = {}
+        self.config = config or ColorConfig()
+        self.colors = {}
+        self.bg_colors = {}
         self._load_ansi_colors()
+        self.output_handler = output_handler or DataHandler(colorizer=self)
 
-    def _load_ansi_colors(self):
+    def set_output_handler(self, handler: OutputHandler) -> None:
         """
-        Loads ANSI color codes into the Colorizer object.
+        Sets the output handler for the Colorizer.
+
+        Args:
+            handler (OutputHandler): OutputHandler instance to be set.
+
+        Raises:
+            TypeError: If handler is not an instance of OutputHandler.
         """
-        ansi_colors = {
-            "black": 30,
-            "red": 31,
-            "green": 32,
-            "yellow": 33,
-            "blue": 34,
-            "magenta": 35,
-            "cyan": 36,
-            "white": 37,
-            "bright_black": 90,
-            "bright_red": 91,
-            "bright_green": 92,
-            "bright_yellow": 93,
-            "bright_blue": 94,
-            "bright_magenta": 95,
-            "bright_cyan": 96,
-            "bright_white": 97,
+        if not isinstance(handler, OutputHandler):
+            raise TypeError("Handler must be an instance of OutputHandler")
+        self.output_handler = handler
+
+    def _load_ansi_colors(self) -> None:
+        """Loads ANSI color codes for foreground and background colors."""
+        ansi_colors: Dict[str, int] = {
+            "black": 30, "red": 31, "green": 32, "yellow": 33, "blue": 34,
+            "magenta": 35, "cyan": 36, "white": 37, "bright_black": 90,
+            "bright_red": 91, "bright_green": 92, "bright_yellow": 93,
+            "bright_blue": 94, "bright_magenta": 95, "bright_cyan": 96,
+            "bright_white": 97, "grey": 90,
         }
-        ansi_bg_colors = {
-            "bg_black": 40,
-            "bg_red": 41,
-            "bg_green": 42,
-            "bg_yellow": 43,
-            "bg_blue": 44,
-            "bg_magenta": 45,
-            "bg_cyan": 46,
-            "bg_white": 47,
-            "bg_bright_black": 100,
-            "bg_bright_red": 101,
-            "bg_bright_green": 102,
-            "bg_bright_yellow": 103,
-            "bg_bright_blue": 104,
-            "bg_bright_magenta": 105,
-            "bg_bright_cyan": 106,
-            "bg_bright_white": 107,
+        ansi_bg_colors: Dict[str, int] = {
+            "bg_black": 40, "bg_red": 41, "bg_green": 42, "bg_yellow": 43,
+            "bg_blue": 44, "bg_magenta": 45, "bg_cyan": 46, "bg_white": 47,
+            "bg_bright_black": 100, "bg_bright_red": 101, "bg_bright_green": 102,
+            "bg_bright_yellow": 103, "bg_bright_blue": 104, "bg_bright_magenta": 105,
+            "bg_bright_cyan": 106, "bg_bright_white": 107,
         }
 
         for name, code in ansi_colors.items():
             self.colors[name] = AnsiColor(code, name)
         for name, code in ansi_bg_colors.items():
             bg_name = name.replace("bg_", "")
-            # corrected: use bg_name as key, but store full name in AnsiColor for reference.
             self.bg_colors[bg_name] = AnsiColor(code, name)
 
     def get_color_code(self, color_name: str) -> str:
         """
         Retrieves the ANSI escape code for a given color name.
 
-        :param color_name: The name of the color.
-        :return: The ANSI escape code string, or an empty string if the color is not defined.
+        Args:
+            color_name (str): Name of the color.
+
+        Returns:
+            str: ANSI color code string, or empty string if color is not defined.
         """
-        color_obj = self.colors.get(color_name.lower())
+        color_name = (color_name or "").lower()
+        color_obj = self.colors.get(color_name)
         return str(color_obj) if color_obj else ""
 
     def get_bg_color_code(self, color_name: str) -> str:
         """
-        Retrieves the ANSI escape code for a given background color name.
+        Retrieves the ANSI escape code for a background color.
 
-        :param color_name: The name of the background color.
-        :return: The ANSI escape code string, or an empty string if the color is not defined.
+        Args:
+            color_name (str): Name of the background color.
+
+        Returns:
+            str: ANSI background color code string, or empty string if not defined.
         """
-        color_obj = self.bg_colors.get(color_name.lower())
+        color_obj = self.bg_colors.get((color_name or "").lower())
         return str(color_obj) if color_obj else ""
 
-    def colorize(self, text: str, color: str = None, background_color: str = None) -> str:
+    def colorize(self, text: str, color: Optional[str] = None, background_color: Optional[str] = None) -> str:
         """
-        Colorizes a string with foreground and/or background colors, handling nested colors.
+        Colorizes a string with optional foreground and background colors, handling nested ANSI codes.
 
-        :param text: The text to colorize.
-        :param color: The foreground color name.
-        :param background_color: The background color name.
-        :return: The colorized text string.
+        Args:
+            text (str): Text to colorize.
+            color (Optional[str], optional): Foreground color name. Defaults to None.
+            background_color (Optional[str], optional): Background color name. Defaults to None.
+
+        Returns:
+            str: Colorized text string.
         """
-        reset_code = str(Colorizer.RESET)
+        reset_code = str(self.RESET)
         color_code = self.get_color_code(color) if color else ""
         bg_color_code = self.get_bg_color_code(
             background_color) if background_color else ""
@@ -215,197 +309,448 @@ class Colorizer:
             return text
 
         start_tag = ""
-        if color_code and bg_color_code:
+        if all((color_code, bg_color_code)):
             start_tag = f"\033[{color_code.split('[')[1].split('m')[0]};{bg_color_code.split('[')[1].split('m')[0]}m"
         elif color_code:
             start_tag = color_code
-        elif bg_color_code:
+        else:
             start_tag = bg_color_code
 
         end_tag = reset_code
 
-        def _process_text(text_segment):
-            """Applies color codes to a text segment, handling resets."""
+        def _process_text(text_segment: str) -> str:
             processed_segments = []
             i = 0
             while i < len(text_segment):
                 if text_segment.startswith(reset_code, i):
                     processed_segments.append(reset_code)
                     i += len(reset_code)
-                    # Re-apply style after reset
-                    processed_segments.append(start_tag)
+                    processed_segments.append(start_tag)  # Re-apply style
                 else:
                     processed_segments.append(text_segment[i])
                     i += 1
             return "".join(processed_segments)
 
-        processed_text = _process_text(text)
-        return start_tag + processed_text + end_tag
+        return start_tag + _process_text(text) + end_tag
 
-    def color_decorator(self, color_name):
+    def color_decorator(self, color_name: str) -> Callable:
         """
-        Creates a decorator that colorizes the output of a function with a specified color.
+        Creates a decorator to colorize the output of a function with a specific color.
 
-        :param color_name: The name of the color to use for decoration.
-        :return: A decorator function.
+        Args:
+            color_name (str): Name of the color to apply.
+
+        Returns:
+            Callable: Decorator function.
         """
-        def decorator(func):
+
+        def decorator(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 result = func(*args, **kwargs)
-                if isinstance(result, (str, bool, float, int, dict, list)):
+                if isinstance(result, (str, bool, float, int, dict, list, type(None))):
                     return self.colorize(str(result), color_name)
                 try:
                     return self.colorize(str(result), color_name)
                 except TypeError:
                     return result
-
             return wrapper
-
         return decorator
 
-    def create_themed_decorator_factory(self, theme_name, theme_colors):
+    def create_themed_decorator_factory(self, theme_name: str, theme_colors: Dict) -> Callable:
         """
         Creates a decorator factory for themed colorization.
 
-        :param theme_name: The name of the theme.
-        :param theme_colors: A dictionary of theme colors.
-        :return: A theme decorator factory function.
+        Args:
+            theme_name (str): Name of the theme.
+            theme_colors (Dict): Dictionary of colors for the theme.
+
+        Returns:
+            Callable: Themed decorator factory.
         """
-        def themed_decorator_factory(func):
+
+        def themed_decorator_factory(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 result = func(*args, **kwargs)
-                return self.theme_colorize(result, theme_colors)
+                return self.output_handler.format(result, theme_colors)
             return wrapper
         return themed_decorator_factory
 
-    def theme_colorize(self, data, theme_colors, indent_level=0):
+    def theme_colorize(self, data: Any, theme_colors: Dict) -> str:
         """
-        Recursively colorizes data structures (dicts, lists, JSON strings) based on a theme.
+        Colorizes data structures based on a theme.
 
-        :param data: The data to colorize. Can be a dict, list, or JSON string.
-        :param theme_colors: A dictionary defining colors for different data types (key, string, number, etc.).
-        :param indent_level: The current indentation level for pretty printing.
-        :return: The colorized string representation of the data.
+        Args:
+            data (Any): Data to colorize.
+            theme_colors (Dict): Dictionary of colors for the theme.
+
+        Returns:
+            str: Colorized data as a string.
+        """
+        return self.output_handler.format(data, theme_colors)
+
+
+class DataHandler(OutputHandler):
+    """Handles output formatting and colorization for various data types (primarily JSON-like)."""
+
+    colorizer: Optional[Colorizer]
+
+    def __init__(self, colorizer: Optional[Colorizer] = None) -> None:
+        """
+        Initializes DataHandler with an optional Colorizer instance.
+
+        Args:
+            colorizer (Optional[Colorizer], optional): Colorizer instance to use. Defaults to _default_colorizer.
+        """
+        self.colorizer = colorizer or _default_colorizer
+
+    def format(self, data: Any, theme_colors: Dict) -> str:
+        """
+        Formats and colorizes data based on its type, attempting to parse strings as JSON if possible.
+
+        Args:
+            data (Any): Data to format and colorize.
+            theme_colors (Dict): Dictionary of theme colors.
+
+        Returns:
+            str: Formatted and colorized data as a string.
+        """
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                pass  # If not valid JSON, treat it as a string
+        return self._theme_colorize_data(data, theme_colors)
+
+    def _theme_colorize_data(self, data: Any, theme_colors: Dict, indent_level: int = 0) -> str:
+        """
+        Recursively colorizes data structures (dict, list, primitives).
+
+        Args:
+            data (Any): Data to colorize.
+            theme_colors (Dict): Dictionary of theme colors.
+            indent_level (int, optional): Indentation level for nested structures. Defaults to 0.
+
+        Returns:
+            str: Colorized data segment as a string.
         """
         indent = "  " * indent_level
         colored_output = []
 
-        if isinstance(data, (dict, list)):
-            with contextlib.suppress(TypeError, OverflowError):
-                data = json.loads(json.dumps(data))
         if isinstance(data, dict):
-            colored_output.append(self.colorize("{", "grey"))
-            for key, value in data.items():
-                colored_output.extend(
-                    (
-                        f"""\n{indent}  \"{self.colorize(key, theme_colors['key'])}\" : """,
-                        self.theme_colorize(
-                            value, theme_colors, indent_level + 1),
-                        self.colorize(",", "grey"),
-                    )
-                )
-            colored_output.append(f"\n{indent}{self.colorize('}', 'grey')}")
+            colored_output.append(self.colorizer.colorize("{", "grey"))
+            for i, (key, value) in enumerate(data.items()):
+                colored_output.append(f"\n{indent}  ")
+                colored_output.append(
+                    f'"{self.colorizer.colorize(str(key), theme_colors["key"])}": ')
+                colored_output.append(self._theme_colorize_data(
+                    value, theme_colors, indent_level + 1))
+                if i < len(data) - 1:
+                    colored_output.append(self.colorizer.colorize(",", "grey"))
+            colored_output.append(
+                f"\n{indent}{self.colorizer.colorize('}', 'grey')}")
+
         elif isinstance(data, list):
-            colored_output.append(self.colorize("[", "grey"))
-            for item in data:
-                colored_output.extend(
-                    (
-                        f"\n{indent}  ",
-                        self.theme_colorize(
-                            item, theme_colors, indent_level + 1),
-                        self.colorize(",", "grey"),
-                    )
-                )
-            colored_output.append(f"\n{indent}{self.colorize(']', 'grey')}")
+            colored_output.append(self.colorizer.colorize("[", "grey"))
+            for i, item in enumerate(data):
+                colored_output.append(f"\n{indent}  ")
+                colored_output.append(self._theme_colorize_data(
+                    item, theme_colors, indent_level + 1))
+                if i < len(data) - 1:
+                    colored_output.append(self.colorizer.colorize(",", "grey"))
+            colored_output.append(
+                f"\n{indent}{self.colorizer.colorize(']', 'grey')}")
+
         elif isinstance(data, str):
-            try:
-                data = json.loads(data)
-                colored_output.append(self.theme_colorize(
-                    data, theme_colors, indent_level + 1))
-            except json.JSONDecodeError:
-                if data.isnumeric():
-                    data = float(data)
-                    colored_output.append(self.theme_colorize(
-                        data, theme_colors, indent_level))
-                elif data.lower() in ["true", "false"]:
-                    data = data.lower() == "true"
-                    colored_output.append(self.theme_colorize(
-                        data, theme_colors, indent_level))
-                else:
-                    colored_output.append(
-                        self.colorize(f'"{data}"', theme_colors["string"]))
+            colored_output.append(self.colorizer.colorize(
+                f'"{data}"', theme_colors["string"]))
         elif isinstance(data, bool):
-            colored_output.append(self.colorize(
-                str(data), theme_colors["bool"]))
+            colored_output.append(self.colorizer.colorize(
+                str(data).lower(), theme_colors["bool"]))
         elif isinstance(data, (int, float)):
-            colored_output.append(self.colorize(
+            colored_output.append(self.colorizer.colorize(
                 str(data), theme_colors["number"]))
         elif data is None:
-            colored_output.append(self.colorize("null", theme_colors["null"]))
+            colored_output.append(self.colorizer.colorize(
+                "null", theme_colors["null"]))
         else:
-            colored_output.append(
-                self.colorize(str(data), theme_colors["other"]))
+            colored_output.append(self.colorizer.colorize(
+                str(data), theme_colors["other"]))
 
         return "".join(colored_output)
 
 
-# Initialize Colorizer
-default_colorizer = Colorizer()
-
-# Generate color decorators using the default Colorizer instance
-blackcolor = default_colorizer.color_decorator("black")
-whitecolor = default_colorizer.color_decorator("white")
-redcolor = default_colorizer.color_decorator("red")
-greencolor = default_colorizer.color_decorator("green")
-yellowcolor = default_colorizer.color_decorator("yellow")
-bluecolor = default_colorizer.color_decorator("blue")
-magentacolor = default_colorizer.color_decorator("magenta")
-cyancolor = default_colorizer.color_decorator("cyan")
-bright_blackcolor = default_colorizer.color_decorator("bright_black")
-bright_whitecolor = default_colorizer.color_decorator("bright_white")
-bright_redcolor = default_colorizer.color_decorator("bright_red")
-bright_greencolor = default_colorizer.color_decorator("bright_green")
-bright_yellowcolor = default_colorizer.color_decorator("bright_yellow")
-bright_bluecolor = default_colorizer.color_decorator("bright_blue")
-bright_magentacolor = default_colorizer.color_decorator("bright_magenta")
-bright_cyancolor = default_colorizer.color_decorator("bright_cyan")
+_default_colorizer = Colorizer()
 
 
-black = blackcolor(lambda text="": text)
-white = whitecolor(lambda text="": text)
-red = redcolor(lambda text="": text)
-green = greencolor(lambda text="": text)
-yellow = yellowcolor(lambda text="": text)
-blue = bluecolor(lambda text="": text)
-magenta = magentacolor(lambda text="": text)
-cyan = cyancolor(lambda text="": text)
-bright_black = bright_blackcolor(lambda text="": text)
-bright_white = bright_whitecolor(lambda text="": text)
-bright_red = bright_redcolor(lambda text="": text)
-bright_green = bright_greencolor(lambda text="": text)
-bright_yellow = bright_yellowcolor(lambda text="": text)
-bright_blue = bright_bluecolor(lambda text="": text)
-bright_magenta = bright_magentacolor(lambda text="": text)
-bright_cyan = bright_cyancolor(lambda text="": text)
+class YamlHandler(OutputHandler):
+    """Handles output formatting as YAML with colorization."""
+
+    def format(self, data: Any, theme_colors: Dict) -> str:
+        """
+        Formats data as colorized YAML.
+
+        Args:
+            data (Any): Data to format as YAML.
+            theme_colors (Dict): Dictionary of theme colors.
+
+        Returns:
+            str: Colorized YAML string.
+        """
+        yaml_string: str = yaml.dump(
+            data, indent=2, allow_unicode=True, default_flow_style=False)
+        return self._colorize_yaml_string(yaml_string, theme_colors)
+
+    def _colorize_yaml_string(self, yaml_string: str, theme_colors: Dict, colorizer: Optional[Colorizer] = None) -> str:
+        """
+        Colorizes a YAML string based on theme colors using regex.
+
+        Args:
+            yaml_string (str): YAML formatted string to colorize.
+            theme_colors (Dict): Dictionary of theme colors.
+            colorizer (Optional[Colorizer], optional): Colorizer instance. Defaults to _default_colorizer.
+
+        Returns:
+            str: Colorized YAML string.
+        """
+        if colorizer is None:
+            colorizer = _default_colorizer
+        color_map: Dict[str, str] = {
+            r"^(\s*)([\w\._-]+):": theme_colors["key"],
+            r"(?<=-|:)(['\" ])([^\n]+)(\1|$)(?!\:)": theme_colors["string"],
+            r"\b-?\d+\.?\d*\b": theme_colors["number"],
+            r"\b(true|false)\b": theme_colors["bool"],
+            r"\bnull\b": theme_colors["null"],
+            r"(\s*):": "grey",
+            r"^\s*-\s": "grey",
+            r"^---": "grey",
+            r"#.*": "grey",
+        }
+
+        colored_yaml = yaml_string
+        for pattern, color_name in color_map.items():
+            color_code = colorizer.get_color_code(color_name)
+            if color_code:
+                def colorize_match(match: re.Match) -> str:
+                    full_match = match.group(0)
+                    if pattern == r"^(\s*)([\w\._-]+):":
+                        leading_space = match.group(
+                            1) if match.group(1) else ""
+                        key = match.group(2)
+                        return f"{leading_space}{colorizer.colorize(key, color_name)}:"
+                    elif pattern == r"(['\"])(.*?)(['\"])(?!\:)":
+                        quote_char = match.group(1)
+                        string_content = match.group(2)
+                        return f"{quote_char}{colorizer.colorize(string_content, color_name)}{quote_char}"
+                    elif pattern == r"(\s*):":
+                        leading_space = match.group(
+                            1) if match.group(1) else ""
+                        return f"{leading_space}{colorizer.colorize(':', color_name)}"
+                    elif pattern == r"^\s*-\s":
+                        return colorizer.colorize(full_match, color_name)
+                    elif pattern == r"^---":
+                        return colorizer.colorize(full_match, color_name)
+                    elif pattern == r"#.*":
+                        return colorizer.colorize(full_match, color_name)
+                    else:
+                        return colorizer.colorize(full_match, color_name)
+
+                colored_yaml = re.sub(
+                    pattern, colorize_match, colored_yaml, flags=re.MULTILINE)
+
+        return colored_yaml
 
 
-# Define Themes
-dark_theme_colors = {"key": "bright_cyan", "string": "yellow", "number": "bright_red",
-                     "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
+class ColorRemoverHandler(OutputHandler):
+    """Handles removing ANSI color codes from formatted output."""
 
-light_theme_colors = {
+    def format(self, data: Any, theme_colors: Dict) -> str:
+        """
+        Removes color from the formatted output using DataHandler for initial formatting.
+
+        Args:
+            data (Any): Data to remove colors from.
+            theme_colors (Dict): Theme colors (not used in this handler but kept for interface consistency).
+
+        Returns:
+            str: Text with ANSI color codes removed.
+        """
+        handler = DataHandler()
+        formatted_text = handler.format(data, theme_colors)
+        return self._remove_ansi_colors(formatted_text)
+
+    def _remove_ansi_colors(self, text: str) -> str:
+        """
+        Removes ANSI color codes using regex.
+
+        Args:
+            text (str): Text containing ANSI color codes.
+
+        Returns:
+            str: Text with ANSI color codes removed.
+        """
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        return ansi_escape.sub("", text)
+
+
+def create_single_wrap(color_name: str) -> Dict:
+    """
+    Creates a theme dictionary with a single foreground color for all elements.
+
+    Args:
+        color_name (str): Name of the color to use for the single-color theme.
+
+    Returns:
+        Dict: Theme dictionary with all elements set to the same color.
+    """
+    return {
+        "key": color_name,
+        "string": color_name,
+        "number": color_name,
+        "bool": color_name,
+        "null": color_name,
+        "other": color_name,
+    }
+
+
+def monotone_decorator_factory(colorizer: Colorizer) -> Dict[str, Callable]:
+    """
+    Creates single color decorators using the theme decorator factory.
+
+    Args:
+        colorizer (Colorizer): Colorizer instance to create decorators with.
+
+    Returns:
+        Dict[str, Callable]: Dictionary of decorator functions, keyed by color name + "_wrap".
+    """
+    color_names = ["black", "white", "red", "green", "yellow", "blue", "magenta", "cyan", "bright_black",
+                   "bright_white", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_magenta", "bright_cyan"]
+    decorators: Dict[str, Callable] = {}
+    for color_name in color_names:
+        theme = create_single_wrap(color_name)
+        decorators[color_name + "_wrap"] = colorizer.create_themed_decorator_factory(
+            color_name, theme)
+    return decorators
+
+
+color_decorators: Dict[str, Callable] = monotone_decorator_factory(
+    _default_colorizer)
+
+black_wrap = color_decorators["black_wrap"]
+white_wrap = color_decorators["white_wrap"]
+red_wrap = color_decorators["red_wrap"]
+green_wrap = color_decorators["green_wrap"]
+yellow_wrap = color_decorators["yellow_wrap"]
+blue_wrap = color_decorators["blue_wrap"]
+magenta_wrap = color_decorators["magenta_wrap"]
+cyan_wrap = color_decorators["cyan_wrap"]
+bright_black_wrap = color_decorators["bright_black_wrap"]
+bright_white_wrap = color_decorators["bright_white_wrap"]
+bright_red_wrap = color_decorators["bright_red_wrap"]
+bright_green_wrap = color_decorators["bright_green_wrap"]
+bright_yellow_wrap = color_decorators["bright_yellow_wrap"]
+bright_blue_wrap = color_decorators["bright_blue_wrap"]
+bright_magenta_wrap = color_decorators["bright_magenta_wrap"]
+bright_cyan_wrap = color_decorators["bright_cyan_wrap"]
+
+
+def black(text: str) -> str:
+    return _default_colorizer.colorize(text, "black")
+
+
+def white(text: str) -> str:
+    return _default_colorizer.colorize(text, "white")
+
+
+def red(text: str) -> str:
+    return _default_colorizer.colorize(text, "red")
+
+
+def green(text: str) -> str:
+    return _default_colorizer.colorize(text, "green")
+
+
+def yellow(text: str) -> str:
+    return _default_colorizer.colorize(text, "yellow")
+
+
+def blue(text: str) -> str:
+    return _default_colorizer.colorize(text, "blue")
+
+
+def magenta(text: str) -> str:
+    return _default_colorizer.colorize(text, "magenta")
+
+
+def cyan(text: str) -> str:
+    return _default_colorizer.colorize(text, "cyan")
+
+
+def bright_black(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_black")
+
+
+def bright_white(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_white")
+
+
+def bright_red(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_red")
+
+
+def bright_green(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_green")
+
+
+def bright_yellow(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_yellow")
+
+
+def bright_blue(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_blue")
+
+
+def bright_magenta(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_magenta")
+
+
+def bright_cyan(text: str) -> str:
+    return _default_colorizer.colorize(text, "bright_cyan")
+
+
+black_deco = _default_colorizer.color_decorator("black")
+white_deco = _default_colorizer.color_decorator("white")
+red_deco = _default_colorizer.color_decorator("red")
+green_deco = _default_colorizer.color_decorator("green")
+yellow_deco = _default_colorizer.color_decorator("yellow")
+blue_deco = _default_colorizer.color_decorator("blue")
+magenta_deco = _default_colorizer.color_decorator("magenta")
+cyan_deco = _default_colorizer.color_decorator("cyan")
+bright_black_deco = _default_colorizer.color_decorator("bright_black")
+bright_white_deco = _default_colorizer.color_decorator("bright_white")
+bright_red_deco = _default_colorizer.color_decorator("bright_red")
+bright_green_deco = _default_colorizer.color_decorator("bright_green")
+bright_yellow_deco = _default_colorizer.color_decorator("bright_yellow")
+bright_blue_deco = _default_colorizer.color_decorator("bright_blue")
+bright_magenta_deco = _default_colorizer.color_decorator("bright_magenta")
+bright_cyan_deco = _default_colorizer.color_decorator("bright_cyan")
+
+
+dark_theme_colors: Dict[str, str] = {"key": "bright_cyan", "string": "yellow", "number": "bright_red",
+                                     "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
+
+light_theme_colors: Dict[str, str] = {
     "key": "blue",
     "string": "bright_yellow",
     "number": "bright_cyan",
     "bool": "bright_magenta",
     "null": "bright_magenta",
-    "other": "yellow",
+    "other": "bright_green",
 }
 
-minimalist_theme_colors = {
-    "key": "bright_black",
+minimalist_theme_colors: Dict[str, str] = {
+    "key": "bright_green",
     "string": "yellow",
     "number": "magenta",
     "bool": "bright_black",
@@ -413,7 +758,7 @@ minimalist_theme_colors = {
     "other": "white",
 }
 
-vibrant_theme_colors = {
+vibrant_theme_colors: Dict[str, str] = {
     "key": "bright_yellow",
     "string": "bright_green",
     "number": "bright_magenta",
@@ -423,101 +768,200 @@ vibrant_theme_colors = {
 }
 
 
-# Create theme decorators using the default Colorizer instance
-darktheme = default_colorizer.create_themed_decorator_factory(
+darktheme = _default_colorizer.create_themed_decorator_factory(
     "dark", dark_theme_colors)
-lighttheme = default_colorizer.create_themed_decorator_factory(
+lighttheme = _default_colorizer.create_themed_decorator_factory(
     "light", light_theme_colors)
-minimalisttheme = default_colorizer.create_themed_decorator_factory(
+minimalisttheme = _default_colorizer.create_themed_decorator_factory(
     "minimalist", minimalist_theme_colors)
-vibranttheme = default_colorizer.create_themed_decorator_factory(
+vibranttheme = _default_colorizer.create_themed_decorator_factory(
     "vibrant", vibrant_theme_colors)
 
-
-# --- Example Usage ---
 if __name__ == "__main__":
+    print("Welcome to the artistic colordoll demo!\n")
 
-    def get_status():
-        return "ERROR"
+    colorizer = _default_colorizer
 
-    def get_success_message():
-        return "Success!"
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print(colorizer.colorize("  Demonstrating Basic Colored Lines", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
 
-    @darktheme
-    def get_json_data():
-        return """
-        {
-            "name": "Example",
-            "version": 1.0,
-            "debug_mode": true,
-            "values": [1, 2.5, null, "hello"],
-            "config": {
-                "host": "localhost",
-                "port": 8080,
-                "nested_config": {
-                    "inner_key": "inner_value",
-                    "inner_list": [true, false, null, 100]
-                }
-            },
-            "status": "ok"
-        }
-        """
+    print(colorizer.colorize("Red", "red") +
+          colorizer.colorize(" Line: ") + colorizer.colorize("---", "red"))
+    print(colorizer.colorize("Green", "green") +
+          colorizer.colorize(" Line: ") + colorizer.colorize("---", "green"))
+    print(colorizer.colorize("Blue", "blue") +
+          colorizer.colorize(" Line: ") + colorizer.colorize("---", "blue"))
+    print()
 
-    @darktheme
-    def get_list_data():
-        return ["item1", {"key": "value", "nested_list": [True, False, "nested_string", 5]}, 123, None, True]
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print(colorizer.colorize("  Creating a Simple Colored Square", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
 
-    @vibranttheme
-    def some_calculation():
-        return 42
+    square_color = "bright_green"
+    square_side = 20
+    for i in range(square_side):
+        if i in [0, square_side - 1]:
+            line = colorizer.colorize("██" * square_side, square_color)
+        else:
+            insides = random.randint(
+                1, (3 + (square_side % random.randint(2, square_side // 4)))
+            )
+            middle_section = "██" * insides
+            spaces = " " * (square_side - 2 - insides)
+            line_content = f" █{spaces}{magenta(middle_section)}{spaces}█ "
+            line = colorizer.colorize(
+                text=line_content, color="red", background_color="grey")
+        print(line)
 
-    print(" * " * 20)
-    # Test case: foreground and background color together
-    print(default_colorizer.colorize(blue("This is " + default_colorizer.colorize(get_status(), "red") +
-          " and " + default_colorizer.colorize(get_success_message(), "green") + " text."), background_color="bg_red"))
+    print()
 
-    # Test case: nested colorization with background - fixed version should handle this correctly
-    nested_colored_text = default_colorizer.colorize(
-        f"This is {default_colorizer.colorize('red text with bright black', 'red', "bright_black")} on yellow with bright_blue background",
-        "yellow",
-        "bright_blue")
+    print(colorizer.colorize("-" * 40, "red", "black"))
+    print(colorizer.colorize(
+        "  Creating a Colored Heart Text Art    ", "black", "magenta"))
+    print(colorizer.colorize("-" * 40, "red", "black"))
 
-    print(nested_colored_text)
+    heart_art = """
 
-    print(get_json_data())
-    print(get_list_data())
-    print(default_colorizer.colorize(some_calculation(), "yellow"))
+     ███   ███
+    █████ █████
+   █████████████
+  ███████████████
+ ██████""" + (
+        red('1') +
+        green(' 2 ') +
+        blue('3')
+    ) + """██████
+ █████████████████
+  ███████████████
+   █████████████
+    ███████████
+     █████████
+      ███████
+       █████
+        ███
+         █
+
+    """
+
+    heart_lines = heart_art.split("\n")
+    heart_colors = ["bright_red", "red", "magenta", "bright_magenta"]
+
+    for i, line in enumerate(heart_lines):
+        colored_line = ""
+        color_index = i % len(heart_colors)
+        line_color = heart_colors[color_index]
+        colored_line = colorizer.colorize(line, line_color)
+        print(colored_line)
+    print()
+
+    print(colorizer.colorize("-" * 40, "black", "bright_green"))
+    print(colorizer.colorize("  Themed Heart Art (Minimalist)      ", "bright_white"))
+    print(colorizer.colorize("-" * 40, "black", "bright_green"))
 
     @minimalisttheme
-    def get_minimalist_json():
-        return """
-        {
-            "app": "Minimalist Settings",
-            "features": ["clean", "simple", "fast"],
-            "config": {
-                "theme": "minimalist",
-                "verbose_output": false
-            },
-            "numeric" : 100
-        }
-        """
+    def get_minimalist_heart() -> str:
+        return heart_art
+
+    print(get_minimalist_heart())
+    print()
+
+    print(colorizer.colorize("-" * 40, "green"))
+    print(colorizer.colorize(
+        "  Themed Heart Art (Vibrant with Background)", color="bright_white"))
+    print(colorizer.colorize("-" * 40, "green"))
 
     @vibranttheme
-    def get_vibrant_json():
-        return """
-        {
-            "module": "Data Visualization",
-            "charts": ["bar", "pie", "line"],
-            "options": {
-                "color_palette": "vibrant",
-                "data_points": 150
-            }
-        }
-        """
+    def get_vibrant_heart() -> str:
+        return heart_art
 
-    print("\n--- Minimalist Theme ---")
-    print(get_minimalist_json())
+    print(get_vibrant_heart())
+    print()
 
-    print("\n--- Vibrant Theme ---")
-    print(default_colorizer.colorize(
-        get_vibrant_json(), background_color="bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print(colorizer.colorize(
+        "  Themed JSON Data Display (Dark Theme)", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
+
+    sample_json_data = {"name": "Artistic Demo", "type": "Text Art", "colors_used": [
+        "red", "green", "blue", "yellow"], "is_artistic": True, "value": 123}
+
+    @darktheme
+    def get_themed_json_data() -> Dict:
+        return sample_json_data
+
+    print(get_themed_json_data())
+    print()
+
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print(colorizer.colorize(
+        "  Direct Color Functions Example (Corrected)", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print()
+
+    print(bright_cyan("This message is in bright cyan."))
+    print(bright_yellow("And this one is in bright yellow."))
+    print()
+
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print(colorizer.colorize("  End of colordoll Artistic Demo", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
+    print()
+    print()
+    print()
+
+    sample_data = {"name": "Handler Demo", "formats": ["JSON", "Dict/List", "YAML", "HTML", "Color Removed"],
+                   "value": 123, "is_demo": True, "nested": {"item": "nested_value", "list": [1, 2, "three"]}}
+
+    print(" * " * 20)
+    print(_default_colorizer.colorize(
+        "Demonstrating Output Handlers", "bright_white"))
+    print(" * " * 20)
+    print()
+
+    print(_default_colorizer.colorize("-" * 40, "green"))
+    print(_default_colorizer.colorize("  JSON Handler Output", "bright_white"))
+    print(_default_colorizer.colorize("-" * 40, "green"))
+    print(_default_colorizer.theme_colorize(sample_data, dark_theme_colors))
+    print()
+
+    print(_default_colorizer.colorize("-" * 40, "cyan"))
+    print(_default_colorizer.colorize(
+        "  Dict/List Handler Output", "bright_white"))
+    print(colorizer.colorize("-" * 40, "cyan"))
+    _default_colorizer.set_output_handler(DataHandler())
+    print(_default_colorizer.theme_colorize(sample_data, dark_theme_colors))
+
+    if yaml is not None:
+        print(_default_colorizer.colorize("-" * 40, "cyan"))
+        print(_default_colorizer.colorize(
+            "  YAML Handler Output", "bright_white"))
+        print(_default_colorizer.colorize("-" * 40, "cyan"))
+        _default_colorizer.set_output_handler(YamlHandler())
+
+        def getyaml() -> str:
+            return _default_colorizer.theme_colorize(sample_data, dark_theme_colors)
+
+        print(getyaml())
+    else:
+        print(_default_colorizer.colorize(
+            "YAML Handler skipped due to PyYAML installation issue.", "yellow"))
+        print()
+
+    print(_default_colorizer.colorize("-" * 40, "cyan"))
+    print(_default_colorizer.colorize(
+        "  Color Remover Handler Output", "bright_white"))
+    print(_default_colorizer.colorize("-" * 40, "cyan"))
+    _default_colorizer.set_output_handler(ColorRemoverHandler())
+    removed_color_output = _default_colorizer.theme_colorize(
+        sample_data, dark_theme_colors)
+    print(f"{removed_color_output}")
+
+    _default_colorizer.set_output_handler(DataHandler())
+    print(_default_colorizer.theme_colorize(
+        removed_color_output, vibrant_theme_colors))
+
+    print(" * " * 20)
+    print(_default_colorizer.colorize(
+        "End of Output Handler Demo", "bright_white"))
+    print(" * " * 20)
