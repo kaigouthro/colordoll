@@ -505,7 +505,7 @@ class DataHandler(OutputHandler):
         return "".join(colored_output)
 
 
-_default_colorizer = Colorizer(output_handler=DataHandler())
+default_colorizer = Colorizer(output_handler=DataHandler())
 
 
 class YamlHandler(OutputHandler):
@@ -532,13 +532,13 @@ class YamlHandler(OutputHandler):
         Args:
             yaml_string (str): YAML formatted string to colorize.
             theme_colors (Dict): Dictionary of theme colors.
-            colorizer (Optional[Colorizer], optional): Colorizer instance. Defaults to _default_colorizer.
+            colorizer (Optional[Colorizer], optional): Colorizer instance. Defaults to default_colorizer.
 
         Returns:
             str: Colorized YAML string.
         """
         if colorizer is None:
-            colorizer = _default_colorizer
+            colorizer = default_colorizer
         color_map: Dict[str, str] = {
             r"^(\s*)([\w\._-]+):": theme_colors["key"],
             r"(?<=-|:)(['\" ])([^\n]+)(\1|$)(?!\:)": theme_colors["string"],
@@ -555,7 +555,6 @@ class YamlHandler(OutputHandler):
         for pattern, color_name in color_map.items():
             color_code = colorizer.get_color_code(color_name)
             if color_code:
-
                 def colorize_match(match: re.Match) -> str:
                     full_match = match[0]
                     if pattern == r"^(\s*)([\w\._-]+):":
@@ -649,110 +648,140 @@ def monotone_decorator_factory(colorizer: Colorizer) -> Dict[str, Callable]:
     decorators: Dict[str, Callable] = {}
     for color_name in color_names:
         theme = create_single_wrap(color_name)
-        decorators[f"{color_name}_wrap"] = colorizer.create_themed_decorator_factory(color_name, theme)
+        decorators[f"{color_name}"] = colorizer.create_themed_decorator_factory(color_name, theme)
     return decorators
 
 
-color_decorators: Dict[str, Callable] = monotone_decorator_factory(_default_colorizer)
-
-black_wrap = color_decorators["black_wrap"]
-white_wrap = color_decorators["white_wrap"]
-red_wrap = color_decorators["red_wrap"]
-green_wrap = color_decorators["green_wrap"]
-yellow_wrap = color_decorators["yellow_wrap"]
-blue_wrap = color_decorators["blue_wrap"]
-magenta_wrap = color_decorators["magenta_wrap"]
-cyan_wrap = color_decorators["cyan_wrap"]
-bright_black_wrap = color_decorators["bright_black_wrap"]
-bright_white_wrap = color_decorators["bright_white_wrap"]
-bright_red_wrap = color_decorators["bright_red_wrap"]
-bright_green_wrap = color_decorators["bright_green_wrap"]
-bright_yellow_wrap = color_decorators["bright_yellow_wrap"]
-bright_blue_wrap = color_decorators["bright_blue_wrap"]
-bright_magenta_wrap = color_decorators["bright_magenta_wrap"]
-bright_cyan_wrap = color_decorators["bright_cyan_wrap"]
+def wrapmono(color: str = "white") -> Callable:
+    return default_colorizer.create_themed_decorator_factory(color, create_single_wrap(color))
 
 
 def black(text: str) -> str:
-    return _default_colorizer.colorize(text, "black")
+    return default_colorizer.colorize(text, "black")
 
 
 def white(text: str) -> str:
-    return _default_colorizer.colorize(text, "white")
+    return default_colorizer.colorize(text, "white")
 
 
 def red(text: str) -> str:
-    return _default_colorizer.colorize(text, "red")
+    return default_colorizer.colorize(text, "red")
 
 
 def green(text: str) -> str:
-    return _default_colorizer.colorize(text, "green")
+    return default_colorizer.colorize(text, "green")
 
 
 def yellow(text: str) -> str:
-    return _default_colorizer.colorize(text, "yellow")
+    return default_colorizer.colorize(text, "yellow")
 
 
 def blue(text: str) -> str:
-    return _default_colorizer.colorize(text, "blue")
+    return default_colorizer.colorize(text, "blue")
 
 
 def magenta(text: str) -> str:
-    return _default_colorizer.colorize(text, "magenta")
+    return default_colorizer.colorize(text, "magenta")
 
 
 def cyan(text: str) -> str:
-    return _default_colorizer.colorize(text, "cyan")
+    return default_colorizer.colorize(text, "cyan")
 
 
 def bright_black(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_black")
+    return default_colorizer.colorize(text, "bright_black")
 
 
 def bright_white(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_white")
+    return default_colorizer.colorize(text, "bright_white")
 
 
 def bright_red(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_red")
+    return default_colorizer.colorize(text, "bright_red")
 
 
 def bright_green(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_green")
+    return default_colorizer.colorize(text, "bright_green")
 
 
 def bright_yellow(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_yellow")
+    return default_colorizer.colorize(text, "bright_yellow")
 
 
 def bright_blue(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_blue")
+    return default_colorizer.colorize(text, "bright_blue")
 
 
 def bright_magenta(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_magenta")
+    return default_colorizer.colorize(text, "bright_magenta")
 
 
 def bright_cyan(text: str) -> str:
-    return _default_colorizer.colorize(text, "bright_cyan")
+    return default_colorizer.colorize(text, "bright_cyan")
 
 
-black_deco = _default_colorizer.color_decorator("black")
-white_deco = _default_colorizer.color_decorator("white")
-red_deco = _default_colorizer.color_decorator("red")
-green_deco = _default_colorizer.color_decorator("green")
-yellow_deco = _default_colorizer.color_decorator("yellow")
-blue_deco = _default_colorizer.color_decorator("blue")
-magenta_deco = _default_colorizer.color_decorator("magenta")
-cyan_deco = _default_colorizer.color_decorator("cyan")
-bright_black_deco = _default_colorizer.color_decorator("bright_black")
-bright_white_deco = _default_colorizer.color_decorator("bright_white")
-bright_red_deco = _default_colorizer.color_decorator("bright_red")
-bright_green_deco = _default_colorizer.color_decorator("bright_green")
-bright_yellow_deco = _default_colorizer.color_decorator("bright_yellow")
-bright_blue_deco = _default_colorizer.color_decorator("bright_blue")
-bright_magenta_deco = _default_colorizer.color_decorator("bright_magenta")
-bright_cyan_deco = _default_colorizer.color_decorator("bright_cyan")
+def bg_black(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="black")
+
+
+def bg_white(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="white")
+
+
+def bg_red(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="red")
+
+
+def bg_green(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="green")
+
+
+def bg_yellow(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="yellow")
+
+
+def bg_blue(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="blue")
+
+
+def bg_magenta(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="magenta")
+
+
+def bg_cyan(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="cyan")
+
+
+def bg_brblack(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_black")
+
+
+def bg_brwhite(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_white")
+
+
+def bg_brred(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_red")
+
+
+def bg_brgreen(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_green")
+
+
+def bg_bryellow(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_yellow")
+
+
+def bg_brblue(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_blue")
+
+
+def bg_brmagenta(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_magenta")
+
+
+def bg_brcyan(text: str) -> str:
+    return default_colorizer.colorize(text, background_color="bright_cyan")
 
 
 dark_theme_colors: Dict[str, str] = {"key": "bright_cyan", "string": "yellow", "number": "bright_red", "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
@@ -785,176 +814,7 @@ vibrant_theme_colors: Dict[str, str] = {
 }
 
 
-darktheme = _default_colorizer.create_themed_decorator_factory("dark", dark_theme_colors)
-lighttheme = _default_colorizer.create_themed_decorator_factory("light", light_theme_colors)
-minimalisttheme = _default_colorizer.create_themed_decorator_factory("minimalist", minimalist_theme_colors)
-vibranttheme = _default_colorizer.create_themed_decorator_factory("vibrant", vibrant_theme_colors)
-
-if __name__ == "__main__":
-    print("Welcome to the artistic colordoll demo!\n")
-
-    colorizer = _default_colorizer
-
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print(colorizer.colorize("  Demonstrating Basic Colored Lines", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-
-    print(colorizer.colorize("Red", "red") + colorizer.colorize(" Line: ") + colorizer.colorize("---", "red"))
-    print(colorizer.colorize("Green", "green") + colorizer.colorize(" Line: ") + colorizer.colorize("---", "green"))
-    print(colorizer.colorize("Blue", "blue") + colorizer.colorize(" Line: ") + colorizer.colorize("---", "blue"))
-    print()
-
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print(colorizer.colorize("  Creating a Simple Colored Square", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-
-    square_color = "bright_green"
-    square_side = 20
-    for i in range(square_side):
-        if i in [0, square_side - 1]:
-            line = colorizer.colorize("██" * square_side, square_color)
-        else:
-            insides = random.randint(1, (3 + (square_side % random.randint(2, square_side // 4))))
-            middle_section = "██" * insides
-            spaces = " " * (square_side - 2 - insides)
-            line_content = f" █{spaces}{magenta(middle_section)}{spaces}█ "
-            line = colorizer.colorize(text=line_content, color="red", background_color="grey")
-        print(line)
-
-    print()
-
-    print(colorizer.colorize("-" * 40, "red", "black"))
-    print(colorizer.colorize("  Creating a Colored Heart Text Art    ", "black", "magenta"))
-    print(colorizer.colorize("-" * 40, "red", "black"))
-
-    heart_art = (
-        """
-
-     ███   ███
-    █████ █████
-   █████████████
-  ███████████████
- ██████"""
-        + (red("1") + green(" 2 ") + blue("3"))
-        + """██████
- █████████████████
-  ███████████████
-   █████████████
-    ███████████
-     █████████
-      ███████
-       █████
-        ███
-         █
-
-    """
-    )
-
-    heart_lines = heart_art.split("\n")
-    heart_colors = ["bright_red", "red", "magenta", "bright_magenta"]
-
-    for i, line in enumerate(heart_lines):
-        colored_line = ""
-        color_index = i % len(heart_colors)
-        line_color = heart_colors[color_index]
-        colored_line = colorizer.colorize(line, line_color)
-        print(colored_line)
-    print()
-
-    print(colorizer.colorize("-" * 40, "black", "bright_green"))
-    print(colorizer.colorize("  Themed Heart Art (Minimalist)      ", "bright_white"))
-    print(colorizer.colorize("-" * 40, "black", "bright_green"))
-
-    @minimalisttheme
-    def get_minimalist_heart() -> str:
-        return heart_art
-
-    print(get_minimalist_heart())
-    print()
-
-    print(colorizer.colorize("-" * 40, "green"))
-    print(colorizer.colorize("  Themed Heart Art (Vibrant with Background)", color="bright_white"))
-    print(colorizer.colorize("-" * 40, "green"))
-
-    @vibranttheme
-    def get_vibrant_heart() -> str:
-        return heart_art
-
-    print(get_vibrant_heart())
-    print()
-
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print(colorizer.colorize("  Themed JSON Data Display (Dark Theme)", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-
-    sample_json_data = {"name": "Artistic Demo", "type": "Text Art", "colors_used": ["red", "green", "blue", "yellow"], "is_artistic": True, "value": 123}
-
-    @darktheme
-    def get_themed_json_data() -> Dict:
-        return sample_json_data
-
-    print(get_themed_json_data())
-    print()
-
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print(colorizer.colorize("  Direct Color Functions Example (Corrected)", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print()
-
-    print(bright_cyan("This message is in bright cyan."))
-    print(bright_yellow("And this one is in bright yellow."))
-    print()
-
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print(colorizer.colorize("  End of colordoll Artistic Demo", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-    print()
-    print()
-    print()
-
-    sample_data = {"name": "Handler Demo", "formats": ["JSON", "Dict/List", "YAML", "HTML", "Color Removed"], "value": 123, "is_demo": True, "nested": {"item": "nested_value", "list": [1, 2, "three"]}}
-
-    print(" * " * 20)
-    print(_default_colorizer.colorize("Demonstrating Output Handlers", "bright_white"))
-    print(" * " * 20)
-    print()
-
-    print(_default_colorizer.colorize("-" * 40, "green"))
-    print(_default_colorizer.colorize("  JSON Handler Output", "bright_white"))
-    print(_default_colorizer.colorize("-" * 40, "green"))
-    print(_default_colorizer.theme_colorize(sample_data, dark_theme_colors))
-    print()
-
-    print(_default_colorizer.colorize("-" * 40, "cyan"))
-    print(_default_colorizer.colorize("  Dict/List Handler Output", "bright_white"))
-    print(colorizer.colorize("-" * 40, "cyan"))
-    _default_colorizer.set_output_handler(DataHandler())
-    print(_default_colorizer.theme_colorize(sample_data, dark_theme_colors))
-
-    if yaml is not None:
-        print(_default_colorizer.colorize("-" * 40, "cyan"))
-        print(_default_colorizer.colorize("  YAML Handler Output", "bright_white"))
-        print(_default_colorizer.colorize("-" * 40, "cyan"))
-        _default_colorizer.set_output_handler(YamlHandler())
-
-        def getyaml() -> str:
-            return _default_colorizer.theme_colorize(sample_data, dark_theme_colors)
-
-        print(getyaml())
-    else:
-        print(_default_colorizer.colorize("YAML Handler skipped due to PyYAML installation issue.", "yellow"))
-        print()
-
-    print(_default_colorizer.colorize("-" * 40, "cyan"))
-    print(_default_colorizer.colorize("  Color Remover Handler Output", "bright_white"))
-    print(_default_colorizer.colorize("-" * 40, "cyan"))
-    _default_colorizer.set_output_handler(ColorRemoverHandler())
-    removed_color_output = _default_colorizer.theme_colorize(sample_data, dark_theme_colors)
-    print(f"{removed_color_output}")
-
-    _default_colorizer.set_output_handler(DataHandler())
-    print(_default_colorizer.theme_colorize(removed_color_output, vibrant_theme_colors))
-
-    print(" * " * 20)
-    print(_default_colorizer.colorize("End of Output Handler Demo", "bright_white"))
-    print(" * " * 20)
+darktheme = default_colorizer.create_themed_decorator_factory("dark", dark_theme_colors)
+lighttheme = default_colorizer.create_themed_decorator_factory("light", light_theme_colors)
+minimalisttheme = default_colorizer.create_themed_decorator_factory("minimalist", minimalist_theme_colors)
+vibranttheme = default_colorizer.create_themed_decorator_factory("vibrant", vibrant_theme_colors)
