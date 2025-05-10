@@ -208,8 +208,8 @@ This project is licensed under the MIT License.
 *   General code cleanup and minor internal refinements.
 
 ### v0.1.6
-*   Added "monotone wrap" decorators (e.g., `red_wrap`, `blue_wrap`, `bright_cyan_wrap`) for quick single-color theming of structured data output.
-*   Expanded the set of direct color function decorators (e.g., `red_deco`, `blue_deco`).
+*   Added "monotone wrap" decorators (e.g., `@wrapmono("red")`) for quick single-color theming of structured data output.
+*   Expanded the set of direct color applicationns to strings to have all bg coloring as well.
 
 ### v0.1.5
 *   Implemented `ColorRemoverHandler` to strip ANSI escape codes from formatted output, allowing for easy generation of plain text versions.
