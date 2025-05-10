@@ -32,6 +32,8 @@ from .colordoll import (
     light_theme_colors,
     YamlHandler,
     DataHandler,
+    ColorRemoverHandler,
+    ConfigLoader,
 )
 
 __all__ = [
@@ -62,4 +64,7 @@ __all__ = [
     "light_theme_colors",
     "YamlHandler",
     "DataHandler",
+    "Col",
+    "ColorRemoverHandler",
+    "ConfigLoader",
 ]
