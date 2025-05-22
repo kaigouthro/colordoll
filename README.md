@@ -12,9 +12,9 @@ And, it's fairly Quick.
 
 | Function             | Runs      | Min Time (sec) | Max Time (sec) | Avg Time (sec) | As milliseconds | Runs / second  |
 |----------------------|-----------|----------------|----------------|----------------|-----------------|----------------|
-| `colorize`           | 10,000    | 0.000006       | 0.000006       | 0.000006       |       0.006     | ~165000        |
-| `theme_colorize`     | 10,000    | 0.000059       | 0.000060       | 0.000059       |       0.059     | ~16950         |
-| Themed Decorator     | 10,000    | 0.000023       | 0.000023       | 0.000023       |       0.023     | ~43450         |
+| `colorize`           | 10,000    | 0.000006       | 0.000006       | 0.000006       |       0.006     | ~166000        |
+| `theme_colorize`     | 10,000    | 0.000046       | 0.000047       | 0.000047       |       0.047     | ~21000         |
+| Themed Decorator     | 10,000    | 0.000015       | 0.000015       | 0.000015       |       0.015     | ~66000         |
 
 ## Features
 
@@ -189,7 +189,7 @@ default_colorizer.set_output_handler(DataHandler())
 
 ## Examples Above in terminal
 
-![](https://raw.githubusercontent.com/kaigouthro/colordoll/main/media/examples.png)
+![example image](https://raw.githubusercontent.com/kaigouthro/colordoll/main/media/examples.png)
 
 ## Contributing
 
@@ -201,7 +201,12 @@ This project is licensed under the MIT License.
 
 ## Change Log
 
-### v0.1.7 (Current Release)
+### v0.1.8
+*   Default theme in colorizer
+*   `Colorizer.set_theme({})` to set theme to use with `Colorizer.theme_colorize(text)` making the theme input optional for temp over-riding.
+*   Wrapping themes can now take a bool asnd pass  return value and print at the same time.. see examples in demo.
+
+### v0.1.7
 *   Updated performance benchmarks with latest figures for v0.1.7.
 *   Improved internal logic for `colorize` for more robust nested color and background/foreground combination handling.
 *   Documentation enhancements and README update to reflect new features.
@@ -232,3 +237,6 @@ This project is licensed under the MIT License.
 *   Introduced theming for structured data (dictionaries, lists) and decorator support (`@darktheme`, etc.).
 *   Enabled custom color configurations via dictionaries (and implicitly JSON files).
 *   Included various pre-defined themes (dark, light, vibrant, minimalist).
+
+
+![demo image](media/demo.png)

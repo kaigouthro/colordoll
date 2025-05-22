@@ -13,8 +13,8 @@ colorize_statement = """
 default_colorizer.colorize(text, color="red", background_color="bg_blue")
 """
 colorize_timer = timeit.Timer(colorize_statement, setup=colorize_setup)
-colorize_runs = 1000
-colorize_times = colorize_timer.repeat(5, colorize_runs)
+colorize_runs = 10000
+colorize_times = colorize_timer.repeat(20, colorize_runs)
 print(f"Colorize function - {colorize_runs} runs:")
 print(f"  Min time: {min(colorize_times)/colorize_runs:.6f} sec")
 print(f"  Max time: {max(colorize_times)/colorize_runs:.6f} sec")

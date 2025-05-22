@@ -1,10 +1,62 @@
 import contextlib
-import random
 import json
 import re
 from functools import wraps
-from typing import Dict, Union, Optional, Any, Callable
+from typing import Dict, Union, Optional, Any, Callable, TypeVar
 import yaml
+
+
+# Type variable for the return type of the original function being decorated
+_R = TypeVar("_R")
+
+# Type variable for the function type being decorated
+_F = TypeVar("_F", bound=Callable[..., _R])
+
+# Type for the final wrapper that executes the decorated function
+# It can return the original result type _R or a string (themed result)
+FinalWrapperType = Callable[..., Union[_R, str]]
+
+# Type for the factory that is returned when the configurable decorator is called with a config
+# This factory takes a function _F and returns the FinalWrapperType
+ConfigurableDecoratorFactoryInnerType = Callable[[_F], FinalWrapperType]
+
+# Type for the callable object returned by create_themed_decorator_factory
+# This object itself can be:
+# 1. Called with a function to decorate directly (returns FinalWrapperType)
+# 2. Called with a config (bool/None), returning a factory (ConfigurableDecoratorFactoryInnerType)
+TopLevelConfigurableDecoratorType = Callable[
+    [Optional[Union[bool, _F]]],  # Argument can be a function, a boolean, or None
+    Union[ConfigurableDecoratorFactoryInnerType, FinalWrapperType],  # Return type depends on input
+]
+
+dark_theme_colors: Dict[str, str] = {"key": "bright_cyan", "string": "yellow", "number": "bright_red", "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
+
+light_theme_colors: Dict[str, str] = {
+    "key": "blue",
+    "string": "bright_yellow",
+    "number": "bright_cyan",
+    "bool": "bright_magenta",
+    "null": "bright_magenta",
+    "other": "bright_green",
+}
+
+minimalist_theme_colors: Dict[str, str] = {
+    "key": "bright_green",
+    "string": "yellow",
+    "number": "magenta",
+    "bool": "bright_black",
+    "null": "white",
+    "other": "white",
+}
+
+vibrant_theme_colors: Dict[str, str] = {
+    "key": "bright_yellow",
+    "string": "bright_green",
+    "number": "bright_magenta",
+    "bool": "bright_cyan",
+    "null": "yellow",
+    "other": "bright_white",
+}
 
 
 class AnsiColor:
@@ -221,6 +273,7 @@ class Colorizer:
         self.colors = {}
         self.bg_colors = {}
         self._load_ansi_colors()
+        self.theme = dark_theme_colors
         self.output_handler = output_handler or OutputHandler()
 
     def set_output_handler(self, handler: OutputHandler) -> None:
@@ -380,29 +433,67 @@ class Colorizer:
 
         return decorator
 
-    def create_themed_decorator_factory(self, theme_name: str, theme_colors: Dict) -> Callable:
+    def create_themed_decorator_factory(
+        self,
+        theme_name: str,  # theme_name captured for potential use, not active in this example
+        theme_colors: Dict[str, str],
+    ) -> TopLevelConfigurableDecoratorType:
         """
-        Creates a decorator factory for themed colorization.
+        Creates a configurable themed decorator factory.
+
+        The returned callable can be used as a decorator directly (applies theme,
+        returns themed string) or called with a boolean argument to control
+        print behavior (True: prints themed, returns original; False: returns themed string).
 
         Args:
             theme_name (str): Name of the theme.
-            theme_colors (Dict): Dictionary of colors for the theme.
+            theme_colors (Dict[str, str]): Dictionary of colors for the theme.
 
         Returns:
-            Callable: Themed decorator factory.
+            TopLevelConfigurableDecoratorType: A callable that acts as the
+                                               configurable themed decorator.
         """
 
-        def themed_decorator_factory(func: Callable) -> Callable:
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                result = func(*args, **kwargs)
-                return self.output_handler.format(result, theme_colors)
+        # This is the callable object that create_themed_decorator_factory will return.
+        # It needs to determine if it's being called with a function to decorate directly,
+        # or with a configuration argument (the do_print flag).
+        def configurable_themed_decorator(arg_or_func: Optional[Union[bool, _F]] = None) -> Union[ConfigurableDecoratorFactoryInnerType, FinalWrapperType]:
+            # This is the core logic that performs the actual wrapping of the function.
+            # It's parameterized by the function to decorate and the do_print setting.
+            def actual_decorator_logic(func_to_decorate: _F, do_print_setting: bool) -> FinalWrapperType:
+                @wraps(func_to_decorate)
+                def wrapper(*args: Any, **kwargs: Any) -> Union[_R, str]:
+                    original_result: _R = func_to_decorate(*args, **kwargs)
 
-            return wrapper
+                    # 'self' (for self.output_handler) and 'theme_colors'
+                    # are captured from the enclosing scopes.
+                    themed_result: str = self.output_handler.format(original_result, theme_colors)
 
-        return themed_decorator_factory
+                    if do_print_setting:
+                        print(themed_result)
+                        return original_result  # Return the original, non-themed result
+                    else:
+                        return themed_result  # Return the themed string result
 
-    def theme_colorize(self, data: Any, theme_colors: Dict) -> str:
+                return wrapper
+
+            if callable(arg_or_func):
+                # Default 'do_print_setting' for direct decoration is False (return themed string).
+                return actual_decorator_logic(arg_or_func, do_print_setting=False)
+
+            # Convert the argument to a boolean for the do_print_setting.
+            # bool(None) is False, so @my_theme_decorator() behaves like @my_theme_decorator(False).
+            current_do_print_setting = bool(arg_or_func)
+
+            # Return a factory that, when called with a function, applies the actual_decorator_logic.
+            def decorator_factory_for_config(func_to_decorate_inner: _F) -> FinalWrapperType:
+                return actual_decorator_logic(func_to_decorate_inner, current_do_print_setting)
+
+            return decorator_factory_for_config
+
+        return configurable_themed_decorator
+
+    def theme_colorize(self, data: Any, theme_colors: Dict | None = None) -> str:
         """
         Colorizes data structures based on a theme.
 
@@ -413,7 +504,16 @@ class Colorizer:
         Returns:
             str: Colorized data as a string.
         """
-        return self.output_handler.format(data, theme_colors)
+        return self.output_handler.format(data, theme_colors or self.theme)
+
+    def set_theme(self, theme_dict: Dict) -> None:
+        """
+        Sets the current theme.
+
+        Args:
+            theme_dict (Dict): Dictionary of colors for the theme.
+        """
+        self.theme = theme_dict
 
 
 class DataHandler(OutputHandler):
@@ -445,6 +545,7 @@ class DataHandler(OutputHandler):
         if isinstance(data, str):
             with contextlib.suppress(json.JSONDecodeError):
                 data = json.loads(data)
+
         return self._theme_colorize_data(data, theme_colors)
 
     def _theme_colorize_data(self, data: Any, theme_colors: Dict, indent_level: int = 0) -> str:
@@ -463,6 +564,15 @@ class DataHandler(OutputHandler):
             self.colorizer = Colorizer()
         indent = "  " * indent_level
         colored_output = []
+
+        if isinstance(data, str) and indent == 0:
+            try:
+                # with contextlib.suppress(json.JSONDecodeError):
+                data = json.loads(data)
+            except ValueError:
+                print("Json loads attempted and failed")
+                print(f"   {data}  ")
+                colored_output.append(self.colorizer.colorize(f'"{data}"', theme_colors["string"]))
 
         if isinstance(data, dict):
             colored_output.append(self.colorizer.colorize("{", "grey"))
@@ -555,6 +665,7 @@ class YamlHandler(OutputHandler):
         for pattern, color_name in color_map.items():
             color_code = colorizer.get_color_code(color_name)
             if color_code:
+
                 def colorize_match(match: re.Match) -> str:
                     full_match = match[0]
                     if pattern == r"^(\s*)([\w\._-]+):":
@@ -784,37 +895,8 @@ def bg_brcyan(text: str) -> str:
     return default_colorizer.colorize(text, background_color="bright_cyan")
 
 
-dark_theme_colors: Dict[str, str] = {"key": "bright_cyan", "string": "yellow", "number": "bright_red", "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
-
-light_theme_colors: Dict[str, str] = {
-    "key": "blue",
-    "string": "bright_yellow",
-    "number": "bright_cyan",
-    "bool": "bright_magenta",
-    "null": "bright_magenta",
-    "other": "bright_green",
-}
-
-minimalist_theme_colors: Dict[str, str] = {
-    "key": "bright_green",
-    "string": "yellow",
-    "number": "magenta",
-    "bool": "bright_black",
-    "null": "white",
-    "other": "white",
-}
-
-vibrant_theme_colors: Dict[str, str] = {
-    "key": "bright_yellow",
-    "string": "bright_green",
-    "number": "bright_magenta",
-    "bool": "bright_cyan",
-    "null": "yellow",
-    "other": "bright_white",
-}
-
-
 darktheme = default_colorizer.create_themed_decorator_factory("dark", dark_theme_colors)
 lighttheme = default_colorizer.create_themed_decorator_factory("light", light_theme_colors)
 minimalisttheme = default_colorizer.create_themed_decorator_factory("minimalist", minimalist_theme_colors)
 vibranttheme = default_colorizer.create_themed_decorator_factory("vibrant", vibrant_theme_colors)
+

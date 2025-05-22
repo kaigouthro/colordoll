@@ -1,20 +1,4 @@
-from colordoll import (
-    default_colorizer,
-    vibranttheme,
-    minimalisttheme,
-    darktheme,
-    DataHandler,
-    YamlHandler,
-    ColorRemoverHandler,
-    vibrant_theme_colors,
-    dark_theme_colors,
-    magenta,
-    red,
-    green,
-    blue,
-    bright_cyan,
-    bright_yellow,
-)
+from colordoll import default_colorizer, vibranttheme, minimalisttheme, darktheme, DataHandler, YamlHandler, ColorRemoverHandler, vibrant_theme_colors, dark_theme_colors, magenta, red, green, blue, bright_cyan, bright_yellow, wrapmono
 import yaml
 import random
 from typing import Dict
@@ -95,7 +79,7 @@ if __name__ == "__main__":
     print(colorizer.colorize("  Themed Heart Art (Minimalist)      ", "bright_white"))
     print(colorizer.colorize("-" * 40, "black", "bright_green"))
 
-    @minimalisttheme  # minimalisttheme uses default_colorizer
+    @minimalisttheme(True)  # minimalisttheme uses default_colorizer
     def get_minimalist_heart(heart_art) -> str:
         return heart_art
 
@@ -155,7 +139,7 @@ if __name__ == "__main__":
     print()
 
     print(default_colorizer.colorize("-" * 40, "green"))  # Updated
-    print(default_colorizer.colorize("  JSON Handler Output", "bright_white"))  # Updated
+    print(default_colorizer.colorize("  JSON (Gets converted) Output", "bright_white"))  # Updated
     print(default_colorizer.colorize("-" * 40, "green"))  # Updated
     print(default_colorizer.theme_colorize(sample_data, dark_theme_colors))  # Updated
     print()
@@ -168,9 +152,9 @@ if __name__ == "__main__":
     print(default_colorizer.theme_colorize(sample_data, dark_theme_colors))  # Updated
 
     if yaml is not None:
-        print(default_colorizer.colorize("-" * 40, "cyan"))  # Updated
+        print(default_colorizer.colorize("-" * 40, "bright_yellow"))  # Updated
         print(default_colorizer.colorize("  YAML Handler Output", "bright_white"))  # Updated
-        print(default_colorizer.colorize("-" * 40, "cyan"))  # Updated
+        print(default_colorizer.colorize("-" * 40, "bright_yellow"))  # Updated
         default_colorizer.set_output_handler(YamlHandler())  # Updated
 
         def getyaml() -> str:
@@ -194,3 +178,69 @@ if __name__ == "__main__":
     print(" * " * 20)
     print(default_colorizer.colorize("End of Output Handler Demo", "bright_white"))  # Updated
     print(" * " * 20)
+
+    # some fun new abilities to wrap and nest wrap printing
+
+    # will print the dict when called.
+    @darktheme()
+    def thing1():
+        """
+        dict: A dictionary with a single key-value pair.
+        """
+        return {"mynumber": 1234}
+
+    # create a single color wrapper
+    red_themed = wrapmono("red")
+
+    @red_themed(True)
+    def thing2():
+        """
+        dict: A dictionary with a wrappped single key-value pair.
+        """
+        return {"the_other_thing": "This is a string"}
+
+    @vibranttheme(True)
+    def thing_double():
+        """
+        dict: A dictionary with a wrappped single key-value pair.
+        """
+        return {
+            # with not print here, will nest colorization,  but the value is now the colorized string here with ansi codes.
+            "Thing1": thing1(),
+            # will Print during thing_double call in it's own color
+            # but be printed ALSO by thing_double's output overwritten by this functions vibranttheme
+            "Thing2": thing2(),
+        }
+
+    # you can do this:
+    thing_double()
+
+    # or this
+    print(thing_double())
+
+    # there's some chaining nd nestinng rules i don't have time for atm.. will do soonish.
+    # but prints like this
+    # {
+    #   "the_other_thing": "This is a string"
+    # }
+    # {
+    #   "Thing1": "{
+    #   "mynumber": 1234
+    # }",
+    #   "Thing2": {
+    #     "the_other_thing": "This is a string"
+    #   }
+    # }
+    # {
+    #   "the_other_thing": "This is a string"
+    # }
+    # {
+    #   "Thing1": "{
+    #   "mynumber": 1234
+    # }",
+    #   "Thing2": {
+    #     "the_other_thing": "This is a string"
+    #   }
+    # }
+    # {'Thing1': '\x1b[90m{\x1b[0m\n  "\x1b[96mmynumber\x1b[0m": \x1b[91m1234\x1b[0m\n\x1b[90m}\x1b[0m', 'Thing2': {'the_other_thing': 'This is a string'}}
+    #
