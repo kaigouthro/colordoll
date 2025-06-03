@@ -4,7 +4,7 @@ It includes classes and functions for creating colorized text,
 applying themes, and handling data structures.
 """
 
-from __version__ import __version__
+from .__version__ import __version__
 
 from .colordoll import (
     AnsiColor,
@@ -55,7 +55,7 @@ from .colordoll import (
     default_colorizer,
     wrapmono,
     vibrant_theme_colors,
-    minimalist_theme_colors, 
+    minimalist_theme_colors,
 )
 
 __all__ = [
@@ -102,7 +102,7 @@ __all__ = [
     "light_theme_colors",
     "YamlHandler",
     "DataHandler",
-    "Col",
+    "Colorizer",
     "ColorRemoverHandler",
     "ConfigLoader",
     "default_colorizer",
@@ -128,3 +128,5 @@ __all__ = [
     "vibrant_theme_colors",
     "minimalist_theme_colors",
 ]
+__version__ = __version__
+__author__ = "Kai Gouthro"

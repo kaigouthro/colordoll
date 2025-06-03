@@ -9,8 +9,9 @@ import yaml
 # Type variable for the return type of the original function being decorated
 _R = TypeVar("_R")
 
-# Type variable for the function type being decorated
-_F = TypeVar("_F", bound=Callable[..., _R])
+# Type variable for the function type being decorated..
+_F = TypeVar("_F", bound=Callable[..., _R]) # This allows _F to be any callable that returns _R
+
 
 # Type for the final wrapper that executes the decorated function
 # It can return the original result type _R or a string (themed result)
