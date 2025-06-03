@@ -2,6 +2,7 @@
 # ColorDoll: Nested ANSI Colorization for Python
 
 [![PyPI version](https://badge.fury.io/py/colordoll.svg)](https://badge.fury.io/py/colordoll)
+[![Python package](https://github.com/kaigouthro/colordoll/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/kaigouthro/colordoll/actions/workflows/python-package.yml)
 
 ColorDoll is a Python library that provides flexible and powerful ANSI colorization, including nested colorization and theming for complex data structures like dictionaries, lists, JSON, and YAML strings.
 
