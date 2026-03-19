@@ -58,6 +58,22 @@ from .colordoll import (
     minimalist_theme_colors,
 )
 
+
+class CStr(str):
+    """Chainable String for easy nesting"""
+    def __getattr__(self, name):
+        # Allow colordoll.CStr("text").red.bg_blue
+        if name in default_colorizer.colors:
+            return CStr(default_colorizer.colorize(self, color=name))
+        if name in default_colorizer.bg_colors:
+            return CStr(default_colorizer.colorize(self, background_color=name.replace("bg_", "")))
+        return super().__getattribute__(name)
+
+# Expose this
+def c(text):
+    return CStr(text)
+
+
 __all__ = [
     "AnsiColor",
     "ColorConfig",
@@ -127,6 +143,7 @@ __all__ = [
     "light_theme_colors",
     "vibrant_theme_colors",
     "minimalist_theme_colors",
+    "c"
 ]
 __version__ = __version__
 __author__ = "Kai Gouthro"

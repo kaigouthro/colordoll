@@ -1,3 +1,9 @@
+"""
+This module provides utilities for colorizing text and data structures using ANSI escape codes.
+It includes classes for managing color configurations, applying themes, and creating decorators
+for colorized output. The module also supports YAML and JSON formatting with colorization.
+"""
+
 import contextlib
 import json
 import re
@@ -10,7 +16,9 @@ import yaml
 _R = TypeVar("_R")
 
 # Type variable for the function type being decorated..
-_F = TypeVar("_F", bound=Callable[..., _R]) # This allows _F to be any callable that returns _R
+_F = TypeVar(
+    "_F", bound=Callable[..., _R]
+)  # This allows _F to be any callable that returns _R
 
 
 # Type for the final wrapper that executes the decorated function
@@ -27,10 +35,19 @@ ConfigurableDecoratorFactoryInnerType = Callable[[_F], FinalWrapperType]
 # 2. Called with a config (bool/None), returning a factory (ConfigurableDecoratorFactoryInnerType)
 TopLevelConfigurableDecoratorType = Callable[
     [Optional[Union[bool, _F]]],  # Argument can be a function, a boolean, or None
-    Union[ConfigurableDecoratorFactoryInnerType, FinalWrapperType],  # Return type depends on input
+    Union[
+        ConfigurableDecoratorFactoryInnerType, FinalWrapperType
+    ],  # Return type depends on input
 ]
 
-dark_theme_colors: Dict[str, str] = {"key": "bright_cyan", "string": "yellow", "number": "bright_red", "bool": "magenta", "null": "bright_magenta", "other": "yellow"}
+dark_theme_colors: Dict[str, str] = {
+    "key": "bright_cyan",
+    "string": "yellow",
+    "number": "bright_red",
+    "bool": "magenta",
+    "null": "bright_magenta",
+    "other": "yellow",
+}
 
 light_theme_colors: Dict[str, str] = {
     "key": "blue",
@@ -60,6 +77,68 @@ vibrant_theme_colors: Dict[str, str] = {
 }
 
 
+class ColoredData(str):
+    """
+    A string subclass that masquerades as the original data object.
+    It prints as the colored string, but behaves like the original data
+    for logic, iteration, and attribute access.
+    """
+
+    def __new__(cls, colored_text: str, original_data: Any):
+        obj = str.__new__(cls, colored_text)
+        obj._original = original_data
+        return obj
+
+    # --- INVISIBILITY CLOAK (The Magic) ---
+
+    def __getattr__(self, name):
+        # Allows access to methods/attributes of the original object
+        return getattr(self._original, name)
+
+    def __getitem__(self, key):
+        # Allows dict['key'] or list[index] access
+        return self._original[key]
+
+    def __setitem__(self, key, value):
+        # Allows modification if the original is mutable
+        self._original[key] = value
+
+    def __iter__(self):
+        # Allows "for item in data:" loops
+        return iter(self._original)
+
+    def __len__(self):
+        # Allows len(data) to return the dict/list length, not the string length
+        return len(self._original)
+
+    def __contains__(self, item):
+        # Allows "if 'key' in data:"
+        return item in self._original
+
+    def __eq__(self, other):
+        # Allows "if data == {'a': 1}:" to work correctly
+        return self._original == other
+
+    def __bool__(self):
+        # CRITICAL: Allows "if data:" to work based on data, not the string
+        # (Prevents empty lists from evaluating as True because of color codes)
+        return bool(self._original)
+
+    def __repr__(self) -> str:
+        # When this object is embedded in a container (dict/list), Python uses
+        # __repr__, which would normally render escape sequences as "\\x1b".
+        # Returning the string itself keeps the ANSI codes intact for terminals.
+        return str(self)
+
+    def __dir__(self):
+        # Helps IDEs/debuggers see the real object methods
+        return dir(self._original)
+
+    def unwrap(self):
+        """Escape hatch to get the raw object back."""
+        return self._original
+
+
 class AnsiColor:
     """Represents an ANSI escape code for text coloration."""
 
@@ -84,7 +163,7 @@ class AnsiColor:
 
     def __str__(self) -> str:
         """Returns the ANSI escape code sequence as a string."""
-        return f"\033[{self.code}m"
+        return "\033[" + str(self.code) + "m"
 
     def __repr__(self) -> str:
         """Returns a string representation of the AnsiColor object."""
@@ -232,7 +311,9 @@ class ColorConfig:
             return None
         color_data: Dict = self.config[color_name]
         if "code" not in color_data:
-            raise ValueError(f"Invalid color configuration for '{color_name}': missing 'code' field")
+            raise ValueError(
+                f"Invalid color configuration for '{color_name}': missing 'code' field"
+            )
         return AnsiColor(code=color_data["code"], name=color_name)
 
 
@@ -254,7 +335,34 @@ class OutputHandler:
 
 
 class Colorizer:
-    """Provides methods for colorizing text and handling output formatting."""
+    """
+        Colorizer class for handling ANSI color codes and themed text formatting.
+    This class provides comprehensive functionality for colorizing text with ANSI escape codes,
+    managing color themes, and creating decorators that apply color formatting to function outputs.
+    Attributes:
+        RESET (AnsiColor): Constant ANSI reset code.
+        config (ColorConfig): Configuration object for color settings.
+        colors (Dict[str, AnsiColor]): Mapping of foreground color names to ANSI color codes.
+        bg_colors (Dict[str, AnsiColor]): Mapping of background color names to ANSI color codes.
+        output_handler (OutputHandler): Handler for formatting and outputting colored text.
+        theme (Dict[str, str]): Current color theme dictionary.
+    Methods:
+        __init__: Initializes a Colorizer with optional custom config and output handler.
+        set_output_handler: Sets a custom OutputHandler instance with type validation.
+        _load_ansi_colors: Populates foreground and background color mappings from ANSI codes.
+        get_color_code: Retrieves ANSI escape code for a given foreground color name.
+        get_bg_color_code: Retrieves ANSI escape code for a given background color name.
+        colorize: Applies foreground and/or background colors to text, handling nested ANSI codes.
+        color_decorator: Creates a decorator factory that colorizes function return values.
+        create_themed_decorator_factory: Creates a configurable decorator factory for themed output with print control.
+        theme_colorize: Formats data structures using a specified or current theme.
+        set_theme: Updates the current active theme dictionary.
+        wrap_block: Convenience method to directly print themed data.
+    Example:
+        >>> colorizer = Colorizer()
+        >>> colored_text = colorizer.colorize("Hello", color="red")
+        >>> print(colored_text)  # Outputs red-colored "Hello"
+    """
 
     RESET: AnsiColor = AnsiColor(0, "reset")
     config: ColorConfig
@@ -262,7 +370,11 @@ class Colorizer:
     bg_colors: Dict[str, AnsiColor]
     output_handler: OutputHandler
 
-    def __init__(self, config: Optional[ColorConfig] = None, output_handler: Optional[OutputHandler] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[ColorConfig] = None,
+        output_handler: Optional[OutputHandler] = None,
+    ) -> None:
         """
         Initializes a Colorizer object.
 
@@ -364,7 +476,12 @@ class Colorizer:
         color_obj = self.bg_colors.get((color_name or "").lower())
         return str(color_obj) if color_obj else ""
 
-    def colorize(self, text: str, color: Optional[str] = None, background_color: Optional[str] = None) -> str:
+    def colorize(
+        self,
+        text: str,
+        color: Optional[str] = None,
+        background_color: Optional[str] = None,
+    ) -> str:
         """
         Colorizes a string with optional foreground and background colors, handling nested ANSI codes.
 
@@ -378,14 +495,20 @@ class Colorizer:
         """
         reset_code = str(self.RESET)
         color_code = self.get_color_code(color) if color else ""
-        bg_color_code = self.get_bg_color_code(background_color) if background_color else ""
+        bg_color_code = (
+            self.get_bg_color_code(background_color) if background_color else ""
+        )
 
         if not color_code and not bg_color_code:
             return text
 
         start_tag = ""
         if all((color_code, bg_color_code)):
-            start_tag = f"\033[{color_code.split('[')[1].split('m')[0]};{bg_color_code.split('[')[1].split('m')[0]}m"
+            start_tag = "\033["
+            start_tag += color_code.split('[')[1].split('m')[0]
+            start_tag += ";"
+            start_tag += bg_color_code.split('[')[1].split('m')[0]
+            start_tag += "m"
         elif color_code:
             start_tag = color_code
         else:
@@ -406,7 +529,11 @@ class Colorizer:
                     i += 1
             return "".join(processed_segments)
 
-        return start_tag + _process_text(text) + end_tag
+        result = start_tag + _process_text(text) + end_tag
+        # Wrap in ColoredData so that when this value is embedded in a container
+        # (e.g., dict/list) and printed, the ANSI codes are preserved instead of
+        # being escaped (e.g., "\\x1b").
+        return ColoredData(result, text)
 
     def color_decorator(self, color_name: str) -> Callable:
         """
@@ -452,43 +579,52 @@ class Colorizer:
 
         Returns:
             TopLevelConfigurableDecoratorType: A callable that acts as the
-                                               configurable themed decorator.
+            configurable themed decorator.
         """
 
         # This is the callable object that create_themed_decorator_factory will return.
         # It needs to determine if it's being called with a function to decorate directly,
         # or with a configuration argument (the do_print flag).
-        def configurable_themed_decorator(arg_or_func: Optional[Union[bool, _F]] = None) -> Union[ConfigurableDecoratorFactoryInnerType, FinalWrapperType]:
+        def configurable_themed_decorator(
+            arg_or_func: Optional[Union[bool, _F]] = None,
+        ) -> Union[ConfigurableDecoratorFactoryInnerType, FinalWrapperType]:
             # This is the core logic that performs the actual wrapping of the function.
             # It's parameterized by the function to decorate and the do_print setting.
-            def actual_decorator_logic(func_to_decorate: _F, do_print_setting: bool) -> FinalWrapperType:
+            def actual_decorator_logic(
+                func_to_decorate: _F, do_print_setting: bool = True
+            ) -> FinalWrapperType:
+                # Inside create_themed_decorator_factory -> actual_decorator_logic -> wrapper
                 @wraps(func_to_decorate)
-                def wrapper(*args: Any, **kwargs: Any) -> Union[_R, str]:
-                    original_result: _R = func_to_decorate(*args, **kwargs)
-
+                def wrapper(*args: Any, **kwargs: Any) -> Union[object, str]:
+                    original_result: object = func_to_decorate(*args, **kwargs)
                     # 'self' (for self.output_handler) and 'theme_colors'
                     # are captured from the enclosing scopes.
-                    themed_result: str = self.output_handler.format(original_result, theme_colors)
-
+                    themed_result: str = self.output_handler.format(
+                        original_result, theme_colors
+                    )
                     if do_print_setting:
                         print(themed_result)
                         return original_result  # Return the original, non-themed result
                     else:
-                        return themed_result  # Return the themed string result
+                        return ColoredData(themed_result, original_result)
 
                 return wrapper
 
             if callable(arg_or_func):
-                # Default 'do_print_setting' for direct decoration is False (return themed string).
-                return actual_decorator_logic(arg_or_func, do_print_setting=False)
+                # Default 'do_print_setting' for direct decoration is True (print themed, return original).
+                return actual_decorator_logic(arg_or_func, do_print_setting=True)
 
             # Convert the argument to a boolean for the do_print_setting.
             # bool(None) is False, so @my_theme_decorator() behaves like @my_theme_decorator(False).
             current_do_print_setting = bool(arg_or_func)
 
             # Return a factory that, when called with a function, applies the actual_decorator_logic.
-            def decorator_factory_for_config(func_to_decorate_inner: _F) -> FinalWrapperType:
-                return actual_decorator_logic(func_to_decorate_inner, current_do_print_setting)
+            def decorator_factory_for_config(
+                func_to_decorate_inner: _F,
+            ) -> FinalWrapperType:
+                return actual_decorator_logic(
+                    func_to_decorate_inner, current_do_print_setting
+                )
 
             return decorator_factory_for_config
 
@@ -515,6 +651,15 @@ class Colorizer:
             theme_dict (Dict): Dictionary of colors for the theme.
         """
         self.theme = theme_dict
+
+    def wrap_block(self, theme_name: str, data: Any):
+        """Convenience helper to immediately print data in a theme."""
+        # This saves the user from doing: print(colordoll.darktheme(lambda: data)())
+        theme_colors = getattr(
+            self, f"{theme_name}_theme_colors", self.theme
+        )  # specific logic needed to find theme dict
+        # ... logic to find theme ...
+        print(self.output_handler.format(data, theme_colors))
 
 
 class DataHandler(OutputHandler):
@@ -549,7 +694,9 @@ class DataHandler(OutputHandler):
 
         return self._theme_colorize_data(data, theme_colors)
 
-    def _theme_colorize_data(self, data: Any, theme_colors: Dict, indent_level: int = 0) -> str:
+    def _theme_colorize_data(
+        self, data: Any, theme_colors: Dict, indent_level: int = 0
+    ) -> str:
         """
         Recursively colorizes data structures (dict, list, primitives).
 
@@ -566,14 +713,6 @@ class DataHandler(OutputHandler):
         indent = "  " * indent_level
         colored_output = []
 
-        if isinstance(data, str) and indent == 0:
-            try:
-                # with contextlib.suppress(json.JSONDecodeError):
-                data = json.loads(data)
-            except ValueError:
-                print("Json loads attempted and failed")
-                print(f"   {data}  ")
-                colored_output.append(self.colorizer.colorize(f'"{data}"', theme_colors["string"]))
 
         if isinstance(data, dict):
             colored_output.append(self.colorizer.colorize("{", "grey"))
@@ -582,7 +721,16 @@ class DataHandler(OutputHandler):
                     (
                         f"\n{indent}  ",
                         f'"{self.colorizer.colorize(str(key), theme_colors["key"])}": ',
-                        self._theme_colorize_data(value, theme_colors, indent_level + 1),
+                        (
+                            self._theme_colorize_data(
+                                value, theme_colors, indent_level + 1
+                            )
+                            if value is not None and not isinstance(value, str) and not self._is_colorized(value)
+                            else (
+                                value if self._is_colorized(value)
+                                else self.colorizer.colorize(str(value), theme_colors["string"])
+                            )
+                        ),
                     )
                 )
                 if i < len(data) - 1:
@@ -602,18 +750,36 @@ class DataHandler(OutputHandler):
                     colored_output.append(self.colorizer.colorize(",", "grey"))
             colored_output.append(f"\n{indent}{self.colorizer.colorize(']', 'grey')}")
 
-        elif isinstance(data, str):
-            colored_output.append(self.colorizer.colorize(f'"{data}"', theme_colors["string"]))
         elif isinstance(data, bool):
-            colored_output.append(self.colorizer.colorize(str(data).lower(), theme_colors["bool"]))
+            colored_output.append(
+                self.colorizer.colorize(str(data).lower(), theme_colors["bool"])
+            )
         elif isinstance(data, (int, float)):
-            colored_output.append(self.colorizer.colorize(str(data), theme_colors["number"]))
+            colored_output.append(
+                self.colorizer.colorize(str(data), theme_colors["number"])
+            )
         elif data is None:
             colored_output.append(self.colorizer.colorize("null", theme_colors["null"]))
+
+        elif isinstance(data, str):
+            # CHECK: Does this string already contain ANSI escape codes?
+            if self._is_colorized(data):
+                # It's already colored. Keep it as-is (no extra quoting/escaping).
+                colored_output.append(data)
+            else:
+                colored_output.append(
+                    self.colorizer.colorize(f'"{data}"', theme_colors["string"])
+                )
         else:
-            colored_output.append(self.colorizer.colorize(str(data), theme_colors["other"]))
+            colored_output.append(
+                self.colorizer.colorize(str(data), theme_colors["other"])
+            )
 
         return "".join(colored_output)
+
+    def _is_colorized(self, text):
+        """Detect if a string already contains ANSI escape codes."""
+        return isinstance(text, str) and "\033[" in text
 
 
 default_colorizer = Colorizer(output_handler=DataHandler())
@@ -633,10 +799,17 @@ class YamlHandler(OutputHandler):
         Returns:
             str: Colorized YAML string.
         """
-        yaml_string: str = yaml.dump(data, indent=2, allow_unicode=True, default_flow_style=False)
+        yaml_string: str = yaml.dump(
+            data, indent=2, allow_unicode=True, default_flow_style=False
+        )
         return self._colorize_yaml_string(yaml_string, theme_colors)
 
-    def _colorize_yaml_string(self, yaml_string: str, theme_colors: Dict, colorizer: Optional[Colorizer] = None) -> str:
+    def _colorize_yaml_string(
+        self,
+        yaml_string: str,
+        theme_colors: Dict,
+        colorizer: Optional[Colorizer] = None,
+    ) -> str:
         """
         Colorizes a YAML string based on theme colors using regex.
 
@@ -689,7 +862,9 @@ class YamlHandler(OutputHandler):
                     else:
                         return colorizer.colorize(full_match, color_name)
 
-                colored_yaml = re.sub(pattern, colorize_match, colored_yaml, flags=re.MULTILINE)
+                colored_yaml = re.sub(
+                    pattern, colorize_match, colored_yaml, flags=re.MULTILINE
+                )
 
         return colored_yaml
 
@@ -722,7 +897,7 @@ class ColorRemoverHandler(OutputHandler):
         Returns:
             str: Text with ANSI color codes removed.
         """
-        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        ansi_escape = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]+[ -/]*[@-~])")
         return ansi_escape.sub("", text)
 
 
@@ -756,16 +931,37 @@ def monotone_decorator_factory(colorizer: Colorizer) -> Dict[str, Callable]:
     Returns:
         Dict[str, Callable]: Dictionary of decorator functions, keyed by color name + "_wrap".
     """
-    color_names = ["black", "white", "red", "green", "yellow", "blue", "magenta", "cyan", "bright_black", "bright_white", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_magenta", "bright_cyan"]
+    color_names = [
+        "black",
+        "white",
+        "red",
+        "green",
+        "yellow",
+        "blue",
+        "magenta",
+        "cyan",
+        "bright_black",
+        "bright_white",
+        "bright_red",
+        "bright_green",
+        "bright_yellow",
+        "bright_blue",
+        "bright_magenta",
+        "bright_cyan",
+    ]
     decorators: Dict[str, Callable] = {}
     for color_name in color_names:
         theme = create_single_wrap(color_name)
-        decorators[f"{color_name}"] = colorizer.create_themed_decorator_factory(color_name, theme)
+        decorators[f"{color_name}"] = colorizer.create_themed_decorator_factory(
+            color_name, theme
+        )
     return decorators
 
 
 def wrapmono(color: str = "white") -> Callable:
-    return default_colorizer.create_themed_decorator_factory(color, create_single_wrap(color))
+    return default_colorizer.create_themed_decorator_factory(
+        color, create_single_wrap(color)
+    )
 
 
 def black(text: str) -> str:
@@ -897,7 +1093,44 @@ def bg_brcyan(text: str) -> str:
 
 
 darktheme = default_colorizer.create_themed_decorator_factory("dark", dark_theme_colors)
-lighttheme = default_colorizer.create_themed_decorator_factory("light", light_theme_colors)
-minimalisttheme = default_colorizer.create_themed_decorator_factory("minimalist", minimalist_theme_colors)
-vibranttheme = default_colorizer.create_themed_decorator_factory("vibrant", vibrant_theme_colors)
+lighttheme = default_colorizer.create_themed_decorator_factory(
+    "light", light_theme_colors
+)
+minimalisttheme = default_colorizer.create_themed_decorator_factory(
+    "minimalist", minimalist_theme_colors
+)
+vibranttheme = default_colorizer.create_themed_decorator_factory(
+    "vibrant", vibrant_theme_colors
+)
 
+
+# Nesting logic
+@darktheme
+def status_report():
+    # 'ERROR' is manually colored RED, the rest of the dict uses the Dark Theme
+    return {"status": yellow("ERROR"), "count": 5}
+
+
+def status_report2():
+    # 'ERROR' is manually colored RED, the rest of the dict uses the Dark Theme
+    return {"status": yellow("ERROR"), "count": 5}
+
+
+if __name__ == "__main__":
+    """Example usage of the colordoll library with a nested color scenario."""
+    report = status_report()  # will print in  color when called,
+    # and return the original dict withthe colored yellow ansi text when assigned to a variable
+
+    # {
+    #   "status": ERROR,
+    #   "count": 5
+    # }
+    #
+    # and...
+    # when printed, the 'ERROR' will be NOT be yellow, in this case plain string..
+    # {'status': '\x1b[33mERROR\x1b[0m', 'count': 5}
+
+    print(report)
+
+    crm = ColorRemoverHandler()
+    print(crm.format(report, dark_theme_colors))  # will print the dict with 'ERROR' in plain text, no color codes
